@@ -5,38 +5,97 @@ from itertools import product
 #START IN 3D
 
 #Paramters
-Nx, Ny, Nt = 3, 3, 1
-N_links_mu0 = Nx * Ny * Nt
-N_links_mu1 = (Nx - 1) * Ny * Nt
-N_links_mu2 = Nx * (Ny - 1) * Nt
+Nx, Ny, Nt = 3, 3, 2
+g = 1 #Coupling
 
+def I3():
+    return np.eye(3)
+
+def euclidean_distance(n1, n2):
+    return np.sqrt((n1[0] - n2[0])**2 + (n1[1] - n2[1])**2 + (n1[2] - n2[2])**2)
+
+def locate_link_dir(ni, nj):
+    minus = [np.abs(a_i - b_i) for a_i, b_i in zip(ni, nj)]
+    return minus.index(1)
+
+def test_valid_pt(n):
+    if n[0] > Nt - 1:
+        n[0] -= 2
+    if n[1] > Nx - 1:
+        n[1] -= 2
+    if n[2] > Ny - 1:
+        n[2] -= 2
+    return n
 
 
 class qcd_lattice():
     def __init__(self, Nx, Ny, Nt): 
+
         self.Nx = Nx
         self.Ny = Ny
         self.Nt = Nt
 
-        lattice = np.zeros((Nx, Ny, Nt))
+        nlinks = 0
+        self.links = {}
+        #links = {link  #: [sites associated with this link], direction of link, corresponding U}
 
-Umu0 = np.kron(np.eye(N_links_mu0), np.eye(3)) #Initial lattice configuration 
-Umu1 = np.kron(np.eye(N_links_mu1), np.eye(3))
-Umu2 = np.kron(np.eye(N_links_mu2), np.eye(3))
-Umu = np.array([Umu0, Umu1, Umu2])
+        self.states = list(product(range(0, Nt), range(0, Nx), range(0, Ny)))
+        self.sites = dict((site, []) for site in self.states)
+        #sites = {site location: [edges attached to corresponding site]}
+
+        
+
+        for i in range(len(self.states)):
+            for j in range(i, len(self.states)):
+                ni, nj = self.states[i], self.states[j]
+                if euclidean_distance(ni, nj) == 1.0: 
+                    nlinks += 1 
+                    self.links[nlinks] = [ni, nj, locate_link_dir(ni, nj), I3()]
+                    self.sites[ni].append(nlinks), self.sites[nj].append(nlinks)
+
+        self.Uinit = np.kron(np.eye(nlinks), np.eye(3))
+
+    def Plaquette(self, n, mu, nu):
+        plq = np.eye(3)
+
+        n_var = list(n)
+
+        n_plus_mu, n_plus_nu, n_plus_mu_nu = list(n_var), list(n_var), list(n_var)
+
+        n_plus_mu[mu] += 1
+        n_plus_nu[nu] += 1
+        n_plus_mu_nu[mu] += 1
+        n_plus_mu_nu[nu] += 1
+
+
+        plq_sites = [test_valid_pt(n_var), test_valid_pt(n_plus_mu), 
+            test_valid_pt(n_plus_mu_nu), test_valid_pt(n_plus_nu), n_var]
+
+        path = 1
+        for ni, nj in zip(plq_sites, plq_sites[1:]):
+            ni_edges, nj_edges = self.sites[tuple(ni)], self.sites[tuple(nj)]
+            shared_edge = list(set(ni_edges) & set(nj_edges))[0]
+            if path == 1 or path == 2:
+                plq *= self.links[shared_edge][3] 
+            elif path == 3 or path == 4:
+                plq *= self.links[shared_edge][3]
+            
+        return plq
+
 
 full_lattice = qcd_lattice(Nx, Ny, Nt)
 
-def wilson_gauge_action(lattice, U):
+def wilson_gauge_action(lattice):
     #Compute S_G(U) = 2/g^2 \sum_{n \in \Lambda} \sum_{\mu < \nu} Re tr[1 - U_mu,nu(n)]
     S_G = 0
 
-    for n in product(range(lattice.Nx), range(lattice.Ny), range(lattice.Nt)):
-
+    for n in lattice.states:
         for mu in (0, 1, 2):
-            for nu in range(mu, 2):
-                Uuv = 1#Plaquette
-                
-    return
+            for nu in range(mu + 1, 3):
+                Uuv = lattice.Plaquette(n, mu, nu) #Plaquette
+                S_G += np.real(np.trace(np.eye(3) - Uuv))
+    S_G *= 2/(g**2)   
 
-wilson_gauge_action(full_lattice, Umu0)
+    return S_G
+
+print(wilson_gauge_action(full_lattice))
