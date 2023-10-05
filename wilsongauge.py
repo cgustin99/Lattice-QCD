@@ -1,12 +1,15 @@
+from pydoc import locate
 import numpy as np
 from itertools import product
+from collections import defaultdict
 
 
 #START IN 3D
 
 #Paramters
-Nx, Ny, Nt = 3, 3, 2
+Nx, Ny, Nt = 3, 3, 3
 g = 1 #Coupling
+nDim = 3 #Number of dimensions
 
 def I3():
     return np.eye(3)
@@ -40,18 +43,22 @@ class qcd_lattice():
         #links = {link  #: [sites associated with this link], direction of link, corresponding U}
 
         self.states = list(product(range(0, Nt), range(0, Nx), range(0, Ny)))
-        self.sites = dict((site, []) for site in self.states)
-        #sites = {site location: [edges attached to corresponding site]}
-
         
+        self.sites = dict((site, {}) for site in self.states)
+        #sites = {site: {associated link: direction link points}}
 
         for i in range(len(self.states)):
             for j in range(i, len(self.states)):
                 ni, nj = self.states[i], self.states[j]
                 if euclidean_distance(ni, nj) == 1.0: 
                     nlinks += 1 
-                    self.links[nlinks] = [ni, nj, locate_link_dir(ni, nj), I3()]
-                    self.sites[ni].append(nlinks), self.sites[nj].append(nlinks)
+                    direction = locate_link_dir(ni, nj)
+                    self.links[nlinks] = [ni, nj, direction, I3()]
+                    self.sites[ni].update({nlinks: direction})
+                    self.sites[nj].update({nlinks: direction})
+        
+       
+
 
         self.Uinit = np.kron(np.eye(nlinks), np.eye(3))
 
@@ -81,9 +88,23 @@ class qcd_lattice():
                 plq *= self.links[shared_edge][3]
             
         return plq
+    
+    def wilson_loop(self, n, R, j, t):
+        #n: Initial Point
+        #R: spatial distance between m and n 
+        #j: Direction
+        #t: Temporal distance (from t = 0 to t = t)
+
+        loop = np.eye(3)
+
+        print(self.sites)
+        
+        return
 
 
 full_lattice = qcd_lattice(Nx, Ny, Nt)
+
+full_lattice.wilson_loop(n = (0, 0, 0), R = 3, j = 2, t = 2)
 
 def wilson_gauge_action(lattice):
     #Compute S_G(U) = 2/g^2 \sum_{n \in \Lambda} \sum_{\mu < \nu} Re tr[1 - U_mu,nu(n)]
@@ -98,4 +119,3 @@ def wilson_gauge_action(lattice):
 
     return S_G
 
-print(wilson_gauge_action(full_lattice))
