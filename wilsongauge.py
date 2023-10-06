@@ -30,6 +30,31 @@ def test_valid_pt(n):
         n[2] -= 2
     return n
 
+def wilson_line_path(n, R, j):
+        path = [n]
+
+        for k in range(1, R + 1 - n[j]):
+            var_link = list(path[-1])
+            var_link[j] += 1
+            path.append(tuple(var_link))
+
+        return path
+
+def wilson_line_path_dagger(path, R, j):
+    path_dag = []
+    for site in path:
+        var_site = list(site)
+        var_site[j] += R
+        path_dag.append(tuple(var_site))
+    return path_dag[::-1] 
+
+def tidy_path(path):
+    tidied = [path[0]]
+
+    for site in path:
+        if site != tidied[-1]:
+            tidied.append(site)
+    return tidied
 
 class qcd_lattice():
     def __init__(self, Nx, Ny, Nt): 
@@ -88,6 +113,8 @@ class qcd_lattice():
                 plq *= self.links[shared_edge][3]
             
         return plq
+
+    
     
     def wilson_loop(self, n, R, j, t):
         #n: Initial Point
@@ -97,7 +124,14 @@ class qcd_lattice():
 
         loop = np.eye(3)
 
-        print(self.sites)
+        S = wilson_line_path(n, R, j)
+        T = wilson_line_path(S[-1], t, 0)
+        Sdag = wilson_line_path_dagger(S, t, 0)
+        Tdag = wilson_line_path_dagger(T, -R, j)
+        
+        
+        path = tidy_path(S + T + Sdag + Tdag)
+        print(path)
         
         return
 
