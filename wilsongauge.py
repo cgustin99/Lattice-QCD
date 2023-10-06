@@ -1,4 +1,3 @@
-from pydoc import locate
 import numpy as np
 from itertools import product
 from collections import defaultdict
@@ -7,7 +6,10 @@ from collections import defaultdict
 #START IN 3D
 
 #Paramters
-Nx, Ny, Nt = 3, 3, 3
+#We specify total number of points and Length of the hypercube (want Ni >> L)
+L = 10
+#a = N/L
+
 g = 1 #Coupling
 nDim = 3 #Number of dimensions
 
@@ -151,7 +153,7 @@ class qcd_lattice():
         return np.trace(loop)
 
 
-full_lattice = qcd_lattice(Nx, Ny, Nt)
+full_lattice = qcd_lattice(Nx = 10, Ny = 10, Nt = 10)
 
 def wilson_gauge_action(lattice):
     #Compute S_G(U) = 2/g^2 \sum_{n \in \Lambda} \sum_{\mu < \nu} Re tr[1 - U_mu,nu(n)]
