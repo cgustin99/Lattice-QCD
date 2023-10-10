@@ -19,28 +19,9 @@ def I3():
 def euclidean_distance(n1, n2):
     return np.sqrt((n1[0] - n2[0])**2 + (n1[1] - n2[1])**2 + (n1[2] - n2[2])**2)
 
-def locate_link_dir(ni, nj):
+def locate_link_dir(ni, nj,):
     minus = [np.abs(a_i - b_i) for a_i, b_i in zip(ni, nj)]
-    return minus.index(1)
-
-def test_valid_pt(n):
-    if n[0] > Nt - 1:
-        n[0] -= 2
-    if n[1] > Nx - 1:
-        n[1] -= 2
-    if n[2] > Ny - 1:
-        n[2] -= 2
-    return n
-
-def wilson_line_path(n, R, j):
-        path = [n]
-
-        for k in range(1, R + 1 - n[j]):
-            var_link = list(path[-1])
-            var_link[j] += 1
-            path.append(tuple(var_link))
-
-        return path
+    return np.nonzero(minus)[0][0]
 
 def wilson_line_path_dagger(path, R, j):
     path_dag = []
@@ -59,18 +40,17 @@ def tidy_path(path):
     return tidied
     
 
-class qcd_lattice():
-    def __init__(self, Nx, Ny, Nt): 
+class lattice():
+    def __init__(self, N, Nt): 
 
-        self.Nx = Nx
-        self.Ny = Ny
+        self.N = N
         self.Nt = Nt
 
         nlinks = 0
         self.links = {}
         #links = {link  #: [sites associated with this link], direction of link, corresponding U}
 
-        self.states = list(product(range(0, Nt), range(0, Nx), range(0, Ny)))
+        self.states = list(product(range(0, Nt), range(0, N), range(0, N)))
         
         self.sites = dict((site, []) for site in self.states)
         #sites = {site: {associated link: direction link points}}
@@ -78,19 +58,51 @@ class qcd_lattice():
         for i in range(len(self.states)):
             for j in range(i, len(self.states)):
                 ni, nj = self.states[i], self.states[j]
-                if euclidean_distance(ni, nj) == 1.0: 
-                    nlinks += 1 
-                    direction = locate_link_dir(ni, nj)
-                    self.links[nlinks] = [ni, nj, direction, I3()]
-                    self.sites[ni].append(nlinks), self.sites[nj].append(nlinks)
+                if euclidean_distance(ni, nj) == 1.0 or \
+                    euclidean_distance(ni, nj) == (N - 1) or \
+                    euclidean_distance(ni, nj) == (Nt - 1): 
+                        nlinks += 1 
+                        direction = locate_link_dir(ni, nj)
+                        if euclidean_distance(ni, nj) == 1.0:
+                            self.links[nlinks] = [ni, nj, direction, I3()]
+                        else: self.links[nlinks] = [ni, nj, "-" + str(direction), I3()]
+                        self.sites[ni].append(nlinks), self.sites[nj].append(nlinks)
 
         self.Uinit = np.kron(np.eye(nlinks), np.eye(3))
 
+
     def get_shared_edge(self, n, m):
-        #m and n must be nearest neighbors!
+        #m and n must be nearest neighbors or connected via B.C.'s!
         n_edges, m_edges = self.sites[tuple(n)], self.sites[tuple(m)]
         shared_edge = list(set(n_edges) & set(m_edges))[0]
         return shared_edge
+    
+    def test_valid_loop(n):
+        return
+
+    def valid_pt(self, n):
+        if n[0] > self.Nt - 1:
+            n[0] = 0
+        if n[1] > self.N - 1:
+            n[1] = 0
+        if n[2] > self.N - 1:
+            n[2] = 0
+        return n
+
+    def wilson_line_path(self, n, R, j):
+        path = [n]
+        if j == 0: N = self.Nt
+        else: N = self.N
+
+        for k in range(1, R + 1):
+            var_link = list(path[-1])
+            if var_link[np.abs(j)] == N - 1 and j >= 0:
+                var_link[np.abs(j)] = 0
+            elif var_link[np.abs(j)] == 0 and j < 0:
+                var_link[np.abs(j)] = N - 1
+            else: var_link[np.abs(j)] += np.sign(j) * 1
+            path.append(var_link)
+        return path
 
     def Plaquette(self, n, mu, nu):
         plq = np.eye(3)
@@ -104,10 +116,9 @@ class qcd_lattice():
         n_plus_mu_nu[mu] += 1
         n_plus_mu_nu[nu] += 1
 
-
-        plq_sites = [test_valid_pt(n_var), test_valid_pt(n_plus_mu), 
-            test_valid_pt(n_plus_mu_nu), test_valid_pt(n_plus_nu), n_var]
-
+        plq_sites = [self.valid_pt(n_var), self.valid_pt(n_plus_mu), 
+            self.valid_pt(n_plus_mu_nu), self.valid_pt(n_plus_nu), n_var]
+        
         path = 1
         for ni, nj in zip(plq_sites, plq_sites[1:]):
             shared_edge = self.get_shared_edge(ni, nj)
@@ -121,25 +132,24 @@ class qcd_lattice():
     
     
     def wilson_loop(self, n, R, j, t, temp_gauge = False):
-        #n: Initial Point
-        #R: spatial distance between m and n 
-        #j: Direction
-        #t: Temporal distance (from t = 0 to t = t)
+        '''
+        n: Initial Point
+        R: spatial distance between m and n 
+        j: Direction
+        t: Temporal distance (from t = 0 to t = t)
+        '''
 
         loop = np.eye(3)
         num_edges = 0
 
-        assert R < self.Nx, "Loop goes beyond bounds of the lattice"
-        assert t < self.Ny, "Loop goes beyond bounds of the lattice"
+        S = self.wilson_line_path(n, R, j)
+        T = self.wilson_line_path(S[-1], t, 0)
+        Sdag = self.wilson_line_path(T[-1], R, -j)
+        Tdag = wilson_line_path_dagger(Sdag[-1], t, -0)
         
-
-        S = wilson_line_path(n, R, j)
-        T = wilson_line_path(S[-1], t, 0)
-        Sdag = wilson_line_path_dagger(S, t, 0)
-        Tdag = wilson_line_path_dagger(T, -R, j)
-
+        print(Tdag)
         if temp_gauge == True: T, Tdag = np.eye(3), np.eye(3)
-        
+
         path = tidy_path(S + T + Sdag + Tdag)
 
         for site_i in range(len(path) - 1):
@@ -153,7 +163,8 @@ class qcd_lattice():
         return np.trace(loop)
 
 
-full_lattice = qcd_lattice(Nx = 10, Ny = 10, Nt = 10)
+full_lattice = lattice(N = 3, Nt = 3)
+full_lattice.wilson_loop((2, 2, 2), 2, 1, 1)
 
 def wilson_gauge_action(lattice):
     #Compute S_G(U) = 2/g^2 \sum_{n \in \Lambda} \sum_{\mu < \nu} Re tr[1 - U_mu,nu(n)]
