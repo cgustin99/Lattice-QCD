@@ -7,8 +7,10 @@ from collections import defaultdict
 
 #Paramters
 #We specify total number of points and Length of the hypercube (want Ni >> L)
-L = 10
-#a = N/L
+L = 3
+N = 3
+Nt = 3
+a = N/L
 
 g = 1 #Coupling
 nDim = 3 #Number of dimensions
@@ -77,56 +79,42 @@ class lattice():
         shared_edge = list(set(n_edges) & set(m_edges))[0]
         return shared_edge
     
-    def test_valid_loop(n):
-        return
 
-    def valid_pt(self, n):
-        if n[0] > self.Nt - 1:
-            n[0] = 0
-        if n[1] > self.N - 1:
-            n[1] = 0
-        if n[2] > self.N - 1:
-            n[2] = 0
-        return n
-
-    def wilson_line_path(self, n, R, j):
+    def wilson_line_path(self, n, R, j, direction):
         path = [n]
         if j == 0: N = self.Nt
         else: N = self.N
 
         for k in range(1, R + 1):
             var_link = list(path[-1])
-            if var_link[np.abs(j)] == N - 1 and j >= 0:
-                var_link[np.abs(j)] = 0
-            elif var_link[np.abs(j)] == 0 and j < 0:
-                var_link[np.abs(j)] = N - 1
-            else: var_link[np.abs(j)] += np.sign(j) * 1
-            path.append(var_link)
+            if var_link[j] == N - 1 and direction > 0:
+                var_link[j] = 0
+                path.append(var_link)
+            elif var_link[j] == 0 and direction < 0:
+                var_link[j] = N - 1
+                path.append(var_link)
+            else: 
+                var_link[j] += direction 
+                path.append(var_link)
         return path
 
     def Plaquette(self, n, mu, nu):
         plq = np.eye(3)
+        num_edges = 0 
 
-        n_var = list(n)
+        S = self.wilson_line_path(n, 1, mu, +1)
+        T = self.wilson_line_path(S[-1], 1, nu, +1)
+        Sdag = self.wilson_line_path(T[-1], 1, mu, -1)
+        Tdag = self.wilson_line_path(Sdag[-1], 1, nu, -1)
 
-        n_plus_mu, n_plus_nu, n_plus_mu_nu = list(n_var), list(n_var), list(n_var)
+        plq_sites = tidy_path(S + T + Sdag + Tdag)
 
-        n_plus_mu[mu] += 1
-        n_plus_nu[nu] += 1
-        n_plus_mu_nu[mu] += 1
-        n_plus_mu_nu[nu] += 1
-
-        plq_sites = [self.valid_pt(n_var), self.valid_pt(n_plus_mu), 
-            self.valid_pt(n_plus_mu_nu), self.valid_pt(n_plus_nu), n_var]
-        
-        path = 1
-        for ni, nj in zip(plq_sites, plq_sites[1:]):
-            shared_edge = self.get_shared_edge(ni, nj)
-            if path == 1 or path == 2:
-                plq *= self.links[shared_edge][3] 
-            elif path == 3 or path == 4:
-                plq *= np.conjugate(self.links[shared_edge][3])
-            
+        for site_i in range(len(plq_sites) - 1):
+            shared_edge = self.get_shared_edge(plq_sites[site_i], plq_sites[site_i + 1])
+            num_edges += 1
+            if num_edges < 2:
+                plq *= self.links[shared_edge][3]
+            else: plq *= np.conjugate(self.links[shared_edge][3])
         return plq
 
     
@@ -142,12 +130,11 @@ class lattice():
         loop = np.eye(3)
         num_edges = 0
 
-        S = self.wilson_line_path(n, R, j)
-        T = self.wilson_line_path(S[-1], t, 0)
-        Sdag = self.wilson_line_path(T[-1], R, -j)
-        Tdag = wilson_line_path_dagger(Sdag[-1], t, -0)
+        S = self.wilson_line_path(n, R, j, +1)
+        T = self.wilson_line_path(S[-1], t, 0, +1)
+        Sdag = self.wilson_line_path(T[-1], R, j, -1)
+        Tdag = self.wilson_line_path(Sdag[-1], t, 0, -1)
         
-        print(Tdag)
         if temp_gauge == True: T, Tdag = np.eye(3), np.eye(3)
 
         path = tidy_path(S + T + Sdag + Tdag)
@@ -163,8 +150,7 @@ class lattice():
         return np.trace(loop)
 
 
-full_lattice = lattice(N = 3, Nt = 3)
-full_lattice.wilson_loop((2, 2, 2), 2, 1, 1)
+full_lattice = lattice(N, Nt)
 
 def wilson_gauge_action(lattice):
     #Compute S_G(U) = 2/g^2 \sum_{n \in \Lambda} \sum_{\mu < \nu} Re tr[1 - U_mu,nu(n)]
